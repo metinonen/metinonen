@@ -1,0 +1,118 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+public class ForexPredictionAlgorithm
+{
+    private List<(string Name, dynamic Model)> baseModels;
+    private List<double> weights;
+    private double learningRate;
+    private int maxIterations;
+
+    public ForexPredictionAlgorithm(List<(string Name, dynamic Model)> baseModels = null, double learningRate = 0.1, int maxIterations = 10)
+    {
+        this.baseModels = baseModels ?? new List<(string, dynamic)>
+        {
+            ("LinearRegression", new LinearRegressionModel()),
+            ("DecisionTree", new DecisionTreeModel())
+        };
+        this.learningRate = learningRate;
+        this.maxIterations = maxIterations;
+        this.weights = Enumerable.Repeat(1.0 / this.baseModels.Count, this.baseModels.Count).ToList();
+    }
+
+    public void Train(double[][] features, double[] exchangeRates)
+    {
+        // Train each model
+        foreach (var model in baseModels)
+        {
+            model.Model.Train(features, exchangeRates);
+        }
+
+        // Adapt weights over multiple iterations
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            UpdateWeights(features, exchangeRates);
+        }
+    }
+
+    private void UpdateWeights(double[][] features, double[] exchangeRates)
+    {
+        for (int i = 0; i < baseModels.Count; i++)
+        {
+            var predictions = baseModels[i].Model.Predict(features);
+            double error = CalculateMeanSquaredError(predictions, exchangeRates);
+            
+            // Update weights inversely proportional to error
+            weights[i] *= Math.Exp(-learningRate * error);
+        }
+
+        // Normalize weights
+        double totalWeight = weights.Sum();
+        for (int i = 0; i < weights.Count; i++)
+        {
+            weights[i] /= totalWeight;
+        }
+    }
+
+    public double[] Predict(double[][] features)
+    {
+        var combinedPredictions = new double[features.Length];
+
+        for (int i = 0; i < baseModels.Count; i++)
+        {
+            var predictions = baseModels[i].Model.Predict(features);
+
+            for (int j = 0; j < features.Length; j++)
+            {
+                combinedPredictions[j] += predictions[j] * weights[i];
+            }
+        }
+
+        return combinedPredictions;
+    }
+
+    private double CalculateMeanSquaredError(double[] predictions, double[] actuals)
+    {
+        return predictions.Zip(actuals, (pred, actual) => Math.Pow(pred - actual, 2)).Average();
+    }
+}
+
+// Example Usage
+public static class Program
+{
+    public static void Main(string[] args)
+    {
+        // Example dataset for forex prediction (replace with real dataset and preprocessing)
+        double[][] features = GenerateForexFeatures(1000, 10);
+        double[] exchangeRates = GenerateForexRates(1000);
+
+        // Split data (example logic, replace with proper library splitters)
+        var (trainFeatures, testFeatures, trainRates, testRates) = TrainTestSplit(features, exchangeRates, 0.7);
+
+        var forexAlgorithm = new ForexPredictionAlgorithm(learningRate: 0.05, maxIterations: 5);
+        forexAlgorithm.Train(trainFeatures, trainRates);
+
+        double[] predictions = forexAlgorithm.Predict(testFeatures);
+        double mse = forexAlgorithm.CalculateMeanSquaredError(predictions, testRates);
+        Console.WriteLine($"Mean Squared Error: {mse:F2}");
+    }
+
+    // Placeholder methods for synthetic data generation and splitting
+    private static double[][] GenerateForexFeatures(int samples, int features) { /* ... */ return new double[0][]; }
+    private static double[] GenerateForexRates(int samples) { /* ... */ return new double[0]; }
+    private static (double[][], double[][], double[], double[]) TrainTestSplit(double[][] X, double[] y, double trainSize) { /* ... */ return (null, null, null, null); }
+}
+
+// Example Model Implementations
+public class LinearRegressionModel
+{
+    public void Train(double[][] features, double[] labels) { /* Training logic */ }
+    public double[] Predict(double[][] features) { /* Prediction logic */ return new double[features.Length]; }
+}
+
+public class DecisionTreeModel
+{
+    public void Train(double[][] features, double[] labels) { /* Training logic */ }
+    public double[] Predict(double[][] features) { /* Prediction logic */ return new double[features.Length]; }
+}
